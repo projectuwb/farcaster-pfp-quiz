@@ -1,0 +1,9 @@
+{
+  "name": "PFP Quiz",
+  "version": "1.0.0",
+  "description": "Guess who's behind the profile picture!",
+  "icon": "https://pfp-xplore.vercel.app/icon.png",
+  "homeUrl": "https://pfp-xplore.vercel.app",
+  "splashImageUrl": "https://pfp-xplore.vercel.app/splash.png",
+  "splashBackgroundColor": "#8B5CF6"
+}

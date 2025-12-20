@@ -72,6 +72,8 @@ export default function FarcasterPFPQuiz() {
   const [showGreenFlash, setShowGreenFlash] = useState(false);
   const [gamePaused, setGamePaused] = useState(false);
   const [gameHistory, setGameHistory] = useState([]);
+  const [sdkReady, setSdkReady] = useState(false);
+  const [sdkContext, setSdkContext] = useState(null);
   const autoAdvanceTimerRef = useRef(null);
   
   const [settings, setSettings] = useState({
@@ -81,6 +83,65 @@ export default function FarcasterPFPQuiz() {
   });
 
   const currentTheme = THEMES[settings.theme];
+
+  // Initialize Farcaster Mini App SDK
+  useEffect(() => {
+    const initSDK = async () => {
+      try {
+        // Check if SDK is available
+        if (window.sdk) {
+          // Initialize the SDK
+          const context = await window.sdk.context;
+          setSdkContext(context);
+          setSdkReady(true);
+          
+          // Get user FID from context
+          if (context.user?.fid) {
+            setUserFid(context.user.fid);
+            // Fetch user data
+            fetchUserData(context.user.fid);
+          }
+        } else {
+          // Fallback for testing outside mini app
+          console.log('SDK not available, using mock mode');
+          setSdkReady(true);
+        }
+      } catch (error) {
+        console.error('SDK initialization error:', error);
+        setSdkReady(true); // Continue with mock mode
+      }
+    };
+
+    initSDK();
+  }, []);
+
+  const fetchUserData = async (fid) => {
+    try {
+      // Try to get user data from SDK first
+      if (sdkContext?.user) {
+        setUserData({
+          fid: sdkContext.user.fid,
+          username: sdkContext.user.username || `user${fid}`,
+          pfp_url: sdkContext.user.pfpUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${fid}`,
+          display_name: sdkContext.user.displayName || `User ${fid}`,
+          bio: sdkContext.user.bio || 'Farcaster user exploring the network!'
+        });
+      } else {
+        // Fallback to mock data
+        setUserData({
+          fid: fid,
+          username: `user${fid}`,
+          pfp_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fid}`,
+          display_name: `User ${fid}`,
+          bio: 'Farcaster user exploring the network!'
+        });
+      }
+      
+      await checkStreak();
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -127,7 +188,6 @@ export default function FarcasterPFPQuiz() {
     setCombo(1);
     setQuestionsAnswered(prev => prev + 1);
     
-    // Add to game history
     setGameHistory(prev => [...prev, {
       question: currentQuestion,
       userAnswer: null,
@@ -138,16 +198,13 @@ export default function FarcasterPFPQuiz() {
 
     const isLastQuestion = questionCount !== 'endless' && questionsAnswered + 1 >= parseInt(questionCount);
     
-    // Always set auto-advance timer
     autoAdvanceTimerRef.current = setTimeout(() => {
       if (!gamePaused) {
         if (isLastQuestion) {
-          // End game after timer
           saveUserData(sessionScore);
           saveToLeaderboards();
           setScreen('result');
         } else {
-          // Next question
           setShowFeedback(false);
           setTimedOut(false);
           setShowGreenFlash(false);
@@ -362,7 +419,6 @@ export default function FarcasterPFPQuiz() {
     const correct = choice.username === currentQuestion.correct.username;
     setIsCorrect(correct);
     
-    // Add to game history
     setGameHistory(prev => [...prev, {
       question: currentQuestion,
       userAnswer: choice,
@@ -371,7 +427,6 @@ export default function FarcasterPFPQuiz() {
     }]);
     
     if (!correct) {
-      // Red flash for wrong answer, then green flash for correct answer
       setShowRedFlash(true);
       setTimeout(() => {
         setShowRedFlash(false);
@@ -397,16 +452,13 @@ export default function FarcasterPFPQuiz() {
 
     const isLastQuestion = questionCount !== 'endless' && questionsAnswered + 1 >= parseInt(questionCount);
     
-    // Always set auto-advance timer (will be cleared if user views profile)
     autoAdvanceTimerRef.current = setTimeout(() => {
       if (!gamePaused) {
         if (isLastQuestion) {
-          // End game after timer
           saveUserData(sessionScore + (correct ? 100 * combo : 0));
           saveToLeaderboards();
           setScreen('result');
         } else {
-          // Next question
           setShowFeedback(false);
           setSelectedAnswer(null);
           setShowRedFlash(false);
@@ -476,12 +528,10 @@ export default function FarcasterPFPQuiz() {
     const isLastQuestion = questionCount !== 'endless' && questionsAnswered >= parseInt(questionCount);
     
     if (isLastQuestion) {
-      // End the game
       saveUserData(sessionScore);
       saveToLeaderboards();
       setScreen('result');
     } else {
-      // Continue game
       setScreen('game');
       setGamePaused(false);
       
@@ -518,6 +568,13 @@ export default function FarcasterPFPQuiz() {
     };
   }, []);
 
+  // Auto-login if SDK context is available
+  useEffect(() => {
+    if (sdkReady && userFid && screen === 'welcome') {
+      setScreen('modeSelect');
+    }
+  }, [sdkReady, userFid]);
+
   const Confetti = () => (
     <div className="fixed inset-0 pointer-events-none z-50">
       {Array.from({ length: 50 }).map((_, i) => (
@@ -525,7 +582,7 @@ export default function FarcasterPFPQuiz() {
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ['#FFD700', '#FF69B4', '#00CED1', '#FF4500', '#9400D3'][Math.floor(Math.random() * 5)] }} />
         </div>
       ))}
-      <style jsx>{`
+      <style>{`
         @keyframes fall {
           to { transform: translateY(100vh) rotate(360deg); }
         }
@@ -539,7 +596,7 @@ export default function FarcasterPFPQuiz() {
     return (
       <span className="inline-flex items-center gap-1 ml-2">
         {Array.from({ length: Math.min(prestige, 5) }).map((_, i) => (
-          <Star key={i} className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+          <Star key={i} className="w-3 h-3 fill-yellow-400 text-yellow-400" />
         ))}
         {prestige > 5 && <span className="text-xs font-bold text-yellow-400">x{prestige}</span>}
       </span>
@@ -548,30 +605,30 @@ export default function FarcasterPFPQuiz() {
 
   const SettingsModal = () => (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-gray-800">Settings</h2>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">Settings</h2>
           <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-800">
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-800 mb-3">Timer Duration</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="mb-4">
+          <h3 className="font-semibold text-gray-800 mb-2 text-sm">Timer Duration</h3>
+          <div className="grid grid-cols-2 gap-2">
             {[5, 10].map(duration => (
-              <button key={duration} onClick={() => saveSettings({ ...settings, timerDuration: duration })} className={`py-3 rounded-xl font-semibold transition-all ${settings.timerDuration === duration ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
-                {duration} seconds
+              <button key={duration} onClick={() => saveSettings({ ...settings, timerDuration: duration })} className={`py-2 rounded-lg font-semibold text-sm transition-all ${settings.timerDuration === duration ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
+                {duration}s
               </button>
             ))}
           </div>
         </div>
 
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-800 mb-3">Color Theme</h3>
-          <div className="space-y-3">
+        <div className="mb-4">
+          <h3 className="font-semibold text-gray-800 mb-2 text-sm">Color Theme</h3>
+          <div className="space-y-2">
             {Object.entries(THEMES).map(([key, theme]) => (
-              <button key={key} onClick={() => saveSettings({ ...settings, theme: key })} className={`w-full py-3 rounded-xl font-semibold transition-all bg-gradient-to-r ${theme.button} text-white ${settings.theme === key ? 'ring-4 ring-offset-2 ring-purple-500' : ''}`}>
+              <button key={key} onClick={() => saveSettings({ ...settings, theme: key })} className={`w-full py-2 rounded-lg font-semibold text-sm transition-all bg-gradient-to-r ${theme.button} text-white ${settings.theme === key ? 'ring-2 ring-offset-2 ring-purple-500' : ''}`}>
                 {theme.name}
               </button>
             ))}
@@ -580,6 +637,17 @@ export default function FarcasterPFPQuiz() {
       </div>
     </div>
   );
+
+  if (!sdkReady) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-500 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl p-8 text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (screen === 'welcome') {
     return (
@@ -593,7 +661,7 @@ export default function FarcasterPFPQuiz() {
           <h1 className="text-4xl font-bold text-gray-800 mb-2">PFP Quiz</h1>
           <p className="text-gray-600 mb-6">Guess who's behind the profile picture!</p>
           <button onClick={async () => { await mockFarcasterLogin(); setScreen('modeSelect'); }} className={`w-full bg-gradient-to-r ${currentTheme.button} text-white py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all`}>
-            Sign in with Farcaster
+            Start Playing
           </button>
         </div>
       </div>
@@ -607,38 +675,38 @@ export default function FarcasterPFPQuiz() {
     return (
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.secondary} flex items-center justify-center p-4`}>
         {showSettings && <SettingsModal />}
-        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full relative">
+        <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-md w-full relative">
           <button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-            <Settings className="w-6 h-6" />
+            <Settings className="w-5 h-5" />
           </button>
-          <div className="mb-6 p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl">
-            <div className="flex items-center justify-between mb-2">
+          <div className="mb-4 p-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl">
+            <div className="flex items-center justify-between mb-2 text-sm">
               <div className="flex items-center gap-2">
-                <Star className="w-5 h-5 text-yellow-500" />
-                <span className="font-bold text-gray-800">{totalScore} pts</span>
+                <Star className="w-4 h-4 text-yellow-500" />
+                <span className="font-bold text-gray-800">{totalScore}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-orange-500" />
-                <span className="font-bold text-gray-800">{streak} day streak</span>
+                <Flame className="w-4 h-4 text-orange-500" />
+                <span className="font-bold text-gray-800">{streak}</span>
               </div>
             </div>
             <div className="text-center">
-              <span className="text-sm font-semibold px-3 py-1 rounded-full inline-flex items-center" style={{ backgroundColor: level.color + '20', color: level.color }}>
+              <span className="text-xs font-semibold px-2 py-1 rounded-full inline-flex items-center" style={{ backgroundColor: level.color + '20', color: level.color }}>
                 {level.name}
                 <PrestigeBadge prestige={prestigeLevel} />
               </span>
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Choose Your Mode</h2>
-          <div className="space-y-4">
-            <button onClick={() => { setMode('followers'); setScreen('questionSelect'); }} className={`w-full bg-gradient-to-r ${currentTheme.accent} text-white py-6 rounded-xl font-semibold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-3`}>
-              <Users className="w-6 h-6" /> Explore Your Followers
+          <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Choose Mode</h2>
+          <div className="space-y-3">
+            <button onClick={() => { setMode('followers'); setScreen('questionSelect'); }} className={`w-full bg-gradient-to-r ${currentTheme.accent} text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2`}>
+              <Users className="w-5 h-5" /> Followers
             </button>
-            <button onClick={() => { setMode('following'); setScreen('questionSelect'); }} className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-6 rounded-xl font-semibold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-3">
-              <Eye className="w-6 h-6" /> Explore Your Follows
+            <button onClick={() => { setMode('following'); setScreen('questionSelect'); }} className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2">
+              <Eye className="w-5 h-5" /> Following
             </button>
-            <button onClick={() => { setMode('interactions'); setScreen('questionSelect'); }} className={`w-full bg-gradient-to-r ${currentTheme.button} text-white py-6 rounded-xl font-semibold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-3`}>
-              <MessageCircle className="w-6 h-6" /> Explore Your Interactions
+            <button onClick={() => { setMode('interactions'); setScreen('questionSelect'); }} className={`w-full bg-gradient-to-r ${currentTheme.button} text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2`}>
+              <MessageCircle className="w-5 h-5" /> Interactions
             </button>
           </div>
         </div>
@@ -650,21 +718,21 @@ export default function FarcasterPFPQuiz() {
     return (
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.primary} flex items-center justify-center p-4`}>
         {showSettings && <SettingsModal />}
-        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full relative">
+        <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-md w-full relative">
           <button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-            <Settings className="w-6 h-6" />
+            <Settings className="w-5 h-5" />
           </button>
-          <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">How Many Questions?</h2>
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <button onClick={() => { setQuestionCount('5'); startGame(); }} className={`bg-gradient-to-r ${currentTheme.button} text-white py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all`}>
-              5 Questions
+          <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Questions?</h2>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <button onClick={() => { setQuestionCount('5'); startGame(); }} className={`bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
+              5
             </button>
-            <button onClick={() => { setQuestionCount('10'); startGame(); }} className={`bg-gradient-to-r ${currentTheme.button} text-white py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all`}>
-              10 Questions
+            <button onClick={() => { setQuestionCount('10'); startGame(); }} className={`bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
+              10
             </button>
           </div>
-          <button onClick={() => { setQuestionCount('endless'); startGame(); }} className="w-full bg-gradient-to-r from-orange-500 to-red-500 text-white py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all">
-            ♾️ Endless Mode
+          <button onClick={() => { setQuestionCount('endless'); startGame(); }} className="w-full bg-gradient-to-r from-orange-500 to-red-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all">
+            ♾️ Endless
           </button>
         </div>
       </div>
@@ -679,59 +747,55 @@ export default function FarcasterPFPQuiz() {
     const progressToNextLevel = ((scoreInCycle - level.min) / (nextLevelThreshold - level.min)) * 100;
 
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4 transition-colors duration-300 ${showRedFlash ? '!bg-red-600' : showGreenFlash ? '!bg-green-600' : ''}`}>
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} flex flex-col p-2 sm:p-4 transition-colors duration-300 ${showRedFlash ? '!bg-red-600' : showGreenFlash ? '!bg-green-600' : ''}`}>
         {showConfetti && <Confetti />}
-        <div className="max-w-2xl mx-auto mb-4">
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-4 text-white">
-            <div className="flex justify-between items-center mb-2">
+        
+        {/* Compact Status Bar */}
+        <div className="w-full max-w-2xl mx-auto mb-2">
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-2 text-white text-xs sm:text-sm">
+            <div className="flex justify-between items-center mb-1">
               <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-yellow-400" />
-                <div>
-                  <div className="font-bold text-sm">Session: {sessionScore}</div>
-                  <div className="text-xs opacity-75">Total: {totalScore}</div>
-                </div>
+                <Trophy className="w-4 h-4 text-yellow-400" />
+                <span className="font-bold">{sessionScore}</span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  <span className="text-sm font-bold">{streak}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Zap className="w-5 h-5 text-orange-400" />
-                  <span className="font-bold">{combo}x</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-400" />
+                <span className="font-bold">{streak}</span>
+                <Zap className="w-4 h-4 text-orange-400" />
+                <span className="font-bold">{combo}x</span>
               </div>
-              <div className="text-sm">{questionsAnswered}/{questionCount === 'endless' ? '∞' : questionCount}</div>
+              <div>{questionsAnswered}/{questionCount === 'endless' ? '∞' : questionCount}</div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold inline-flex items-center" style={{ color: level.color }}>
-                {level.name}
-                <PrestigeBadge prestige={prestigeLevel} />
+              <span className="text-xs font-semibold" style={{ color: level.color }}>
+                {level.name}<PrestigeBadge prestige={prestigeLevel} />
               </span>
-              <div className="flex-1 bg-white/20 rounded-full h-2 overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 transition-all duration-500" style={{ width: `${progressToNextLevel}%` }} />
+              <div className="flex-1 bg-white/20 rounded-full h-1.5 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 transition-all" style={{ width: `${progressToNextLevel}%` }} />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 mb-4">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Who is this?</h2>
+        {/* Game Content - Centered and Compact */}
+        <div className="flex-1 flex items-center justify-center w-full max-w-2xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-800">Who is this?</h2>
               {timerActive && (
-                <div className={`text-2xl font-bold ${timeLeft <= 2 ? 'text-red-500 animate-pulse' : 'text-gray-700'}`}>
+                <div className={`text-xl sm:text-2xl font-bold ${timeLeft <= 2 ? 'text-red-500 animate-pulse' : 'text-gray-700'}`}>
                   {timeLeft}s
                 </div>
               )}
             </div>
             
-            <div className="flex justify-center mb-8">
+            {/* PFP - Responsive Size */}
+            <div className="flex justify-center mb-4">
               <div className={`relative ${showFeedback && isCorrect ? 'animate-bounce' : ''}`}>
-                <img src={currentQuestion.correct.pfp_url} alt="Profile" className="w-48 h-48 rounded-full border-8 border-purple-500 shadow-xl" />
+                <img src={currentQuestion.correct.pfp_url} alt="Profile" className="w-32 h-32 sm:w-40 sm:h-40 rounded-full border-4 sm:border-6 border-purple-500 shadow-xl" />
                 {showFeedback && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className={`text-6xl ${isCorrect ? 'animate-ping' : ''}`}>
+                    <div className={`text-4xl sm:text-5xl ${isCorrect ? 'animate-ping' : ''}`}>
                       {timedOut ? '⏰' : isCorrect ? '✅' : '❌'}
                     </div>
                   </div>
@@ -739,42 +803,44 @@ export default function FarcasterPFPQuiz() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            {/* Answer Buttons - Compact */}
+            <div className="grid grid-cols-1 gap-2 mb-3">
               {currentQuestion.choices.map((choice, idx) => {
                 const isSelected = selectedAnswer?.username === choice.username;
                 const isCorrectAnswer = choice.username === currentQuestion.correct.username;
                 let buttonStyle = `bg-gradient-to-r ${currentTheme.button} text-white`;
                 if (showFeedback) {
                   if (isCorrectAnswer) {
-                    buttonStyle = 'bg-green-500 text-white border-4 border-green-300';
+                    buttonStyle = 'bg-green-500 text-white border-2 border-green-300';
                   } else if (isSelected && !isCorrect) {
-                    buttonStyle = 'bg-red-500 text-white border-4 border-red-300';
+                    buttonStyle = 'bg-red-500 text-white border-2 border-red-300';
                   } else {
                     buttonStyle = 'bg-gray-300 text-gray-600';
                   }
                 }
                 return (
-                  <button key={idx} onClick={() => !showFeedback && handleAnswer(choice)} disabled={showFeedback} className={`${buttonStyle} py-4 px-6 rounded-xl font-semibold text-lg transition-all hover:shadow-lg disabled:cursor-not-allowed ${showFeedback && !isCorrect && isSelected ? 'animate-pulse' : ''}`}>
+                  <button key={idx} onClick={() => !showFeedback && handleAnswer(choice)} disabled={showFeedback} className={`${buttonStyle} py-2.5 sm:py-3 px-4 rounded-lg font-semibold text-sm sm:text-base transition-all hover:shadow-lg disabled:cursor-not-allowed truncate`}>
                     {choice.username}{showFeedback && isCorrectAnswer && ' ✓'}{showFeedback && isSelected && !isCorrect && ' ✗'}
                   </button>
                 );
               })}
             </div>
 
+            {/* Feedback Buttons - Compact */}
             {showFeedback && (
-              <div className="mt-6">
-                <div className="text-center mb-4">
-                  <div className={`text-xl font-bold ${isCorrect ? 'text-green-600' : timedOut ? 'text-orange-600' : 'text-red-600'}`}>
-                    {isCorrect ? `+${100 * combo} points! 🎉` : timedOut ? 'Time\'s up! ⏰' : 'Not quite! 💭'}
+              <div>
+                <div className="text-center mb-2">
+                  <div className={`text-base sm:text-lg font-bold ${isCorrect ? 'text-green-600' : timedOut ? 'text-orange-600' : 'text-red-600'}`}>
+                    {isCorrect ? `+${100 * combo} pts! 🎉` : timedOut ? 'Time up! ⏰' : 'Not quite! 💭'}
                   </div>
                 </div>
-                <div className={`grid ${questionCount === 'endless' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
-                  <button onClick={viewProfile} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
-                    👤 View Profile
+                <div className={`grid ${questionCount === 'endless' ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                  <button onClick={viewProfile} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-2 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
+                    👤 Profile
                   </button>
                   {questionCount === 'endless' && (
-                    <button onClick={quitGame} className="bg-gradient-to-r from-red-500 to-orange-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2">
-                      <LogOut className="w-5 h-5" /> Quit Game
+                    <button onClick={quitGame} className="bg-gradient-to-r from-red-500 to-orange-500 text-white py-2 rounded-lg font-semibold text-sm hover:shadow-lg transition-all flex items-center justify-center gap-1">
+                      <LogOut className="w-4 h-4" /> Quit
                     </button>
                   )}
                 </div>
@@ -788,25 +854,25 @@ export default function FarcasterPFPQuiz() {
 
   if (screen === 'profile' && viewingProfile) {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4`}>
-        <div className="max-w-2xl mx-auto">
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4 flex items-center justify-center`}>
+        <div className="max-w-2xl w-full">
           <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div className={`h-32 bg-gradient-to-r ${currentTheme.button}`} />
-            <div className="p-8 -mt-16">
-              <img src={viewingProfile.pfp_url} alt={viewingProfile.username} className="w-32 h-32 rounded-full border-8 border-white shadow-xl mb-4" />
-              <h2 className="text-3xl font-bold text-gray-800 mb-1">{viewingProfile.display_name}</h2>
-              <p className="text-purple-600 font-semibold mb-4">@{viewingProfile.username}</p>
-              <p className="text-gray-600 mb-6">{viewingProfile.bio || 'Exploring the Farcaster universe! 🚀'}</p>
-              <div className="bg-gray-50 rounded-xl p-4 mb-6">
-                <p className="text-sm text-gray-500 mb-2">Latest Cast:</p>
-                <p className="text-gray-800">Just minted my first NFT on Base! The future is onchain 🎨✨</p>
+            <div className={`h-24 bg-gradient-to-r ${currentTheme.button}`} />
+            <div className="p-6 -mt-12">
+              <img src={viewingProfile.pfp_url} alt={viewingProfile.username} className="w-24 h-24 rounded-full border-4 border-white shadow-xl mb-3" />
+              <h2 className="text-2xl font-bold text-gray-800 mb-1">{viewingProfile.display_name}</h2>
+              <p className="text-purple-600 font-semibold mb-3">@{viewingProfile.username}</p>
+              <p className="text-gray-600 text-sm mb-4">{viewingProfile.bio || 'Exploring the Farcaster universe! 🚀'}</p>
+              <div className="bg-gray-50 rounded-xl p-3 mb-4">
+                <p className="text-xs text-gray-500 mb-1">Latest Cast:</p>
+                <p className="text-gray-800 text-sm">Just minted my first NFT on Base! The future is onchain 🎨✨</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <button onClick={returnToGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
-                  ← Back to Game
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={returnToGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-2.5 rounded-xl font-semibold hover:shadow-lg transition-all text-sm`}>
+                  ← Back
                 </button>
-                <button onClick={() => window.open(`https://warpcast.com/${viewingProfile.username}`, '_blank')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
-                  View on Warpcast →
+                <button onClick={() => window.open(`https://warpcast.com/${viewingProfile.username}`, '_blank')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-2.5 rounded-xl font-semibold hover:shadow-lg transition-all text-sm`}>
+                  Warpcast →
                 </button>
               </div>
             </div>
@@ -821,45 +887,45 @@ export default function FarcasterPFPQuiz() {
     const currentLeaderboard = leaderboardTab === 'daily' ? dailyLeaderboard : alltimeLeaderboard;
     
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4`}>
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4 flex items-center justify-center`}>
         {showSettings && <SettingsModal />}
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-2xl p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-                <Trophy className="w-8 h-8 text-yellow-500" />
+        <div className="max-w-2xl w-full">
+          <div className="bg-white rounded-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <Trophy className="w-6 h-6 text-yellow-500" />
                 Leaderboard
               </h2>
               <button onClick={() => setShowSettings(true)} className="text-gray-400 hover:text-gray-600">
-                <Settings className="w-6 h-6" />
+                <Settings className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex gap-2 mb-6">
-              <button onClick={() => setLeaderboardTab('daily')} className={`flex-1 py-3 rounded-xl font-semibold transition-all ${leaderboardTab === 'daily' ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => setLeaderboardTab('daily')} className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${leaderboardTab === 'daily' ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
                 Today
               </button>
-              <button onClick={() => setLeaderboardTab('alltime')} className={`flex-1 py-3 rounded-xl font-semibold transition-all ${leaderboardTab === 'alltime' ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
+              <button onClick={() => setLeaderboardTab('alltime')} className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${leaderboardTab === 'alltime' ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
                 All Time
               </button>
             </div>
 
             {currentLeaderboard.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No scores yet. Be the first!</p>
+              <p className="text-center text-gray-500 py-8 text-sm">No scores yet. Be the first!</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {currentLeaderboard.map((entry, idx) => {
                   const isCurrentUser = entry.fid === userFid;
                   return (
-                    <div key={entry.fid} className={`flex items-center gap-4 p-4 rounded-xl ${isCurrentUser ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50'}`}>
-                      <div className="text-2xl font-bold text-gray-400 w-8">{idx + 1}</div>
-                      <img src={entry.pfp} alt={entry.username} className="w-12 h-12 rounded-full" />
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-800 flex items-center">
+                    <div key={entry.fid} className={`flex items-center gap-3 p-3 rounded-lg ${isCurrentUser ? 'bg-purple-100 border-2 border-purple-500' : 'bg-gray-50'}`}>
+                      <div className="text-lg font-bold text-gray-400 w-6">{idx + 1}</div>
+                      <img src={entry.pfp} alt={entry.username} className="w-10 h-10 rounded-full" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-800 flex items-center text-sm truncate">
                           {entry.username}
                           {leaderboardTab === 'alltime' && <PrestigeBadge prestige={entry.prestige} />}
                         </p>
-                        <div className="flex items-center gap-2 text-sm">
+                        <div className="flex items-center gap-2 text-xs">
                           {leaderboardTab === 'alltime' && entry.level && (
                             <span className="text-purple-600">{entry.level}</span>
                           )}
@@ -871,10 +937,10 @@ export default function FarcasterPFPQuiz() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xl font-bold text-gray-800">
+                        <p className="text-lg font-bold text-gray-800">
                           {leaderboardTab === 'daily' ? entry.dailyScore : entry.totalScore}
                         </p>
-                        <p className="text-xs text-gray-500">points</p>
+                        <p className="text-xs text-gray-500">pts</p>
                       </div>
                     </div>
                   );
@@ -882,18 +948,18 @@ export default function FarcasterPFPQuiz() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4 mt-6">
+            <div className="grid grid-cols-2 gap-3 mt-4">
               {comingFromResult ? (
                 <>
-                  <button onClick={() => setScreen('result')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
-                    ← Back to Score
+                  <button onClick={() => setScreen('result')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
+                    ← Score
                   </button>
-                  <button onClick={resetGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
+                  <button onClick={resetGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
                     Play Again
                   </button>
                 </>
               ) : (
-                <button onClick={() => setScreen('game')} className={`col-span-2 bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
+                <button onClick={() => setScreen('game')} className={`col-span-2 bg-gradient-to-r ${currentTheme.button} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
                   Back to Game
                 </button>
               )}
@@ -912,47 +978,46 @@ export default function FarcasterPFPQuiz() {
     return (
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4 flex items-center justify-center`}>
         {showSettings && <SettingsModal />}
-        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full text-center relative">
+        <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-md w-full text-center relative">
           <button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-            <Settings className="w-6 h-6" />
+            <Settings className="w-5 h-5" />
           </button>
-          <div className="text-6xl mb-4">🎊</div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Game Over!</h2>
-          <p className="text-gray-600 mb-6">Great job exploring profiles!</p>
-          <div className={`bg-gradient-to-r ${currentTheme.button} text-white rounded-2xl p-6 mb-6`}>
-            <div className="text-lg mb-1">Session Points</div>
-            <div className="text-5xl font-bold mb-4">{sessionScore}</div>
-            <div className="text-sm opacity-90">Total Points: {totalScore}</div>
+          <div className="text-5xl mb-3">🎊</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-1">Game Over!</h2>
+          <p className="text-gray-600 mb-4 text-sm">Great job!</p>
+          <div className={`bg-gradient-to-r ${currentTheme.button} text-white rounded-2xl p-4 mb-4`}>
+            <div className="text-sm mb-1">Session Points</div>
+            <div className="text-4xl font-bold mb-2">{sessionScore}</div>
+            <div className="text-xs opacity-90">Total: {totalScore}</div>
           </div>
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-2xl font-bold text-gray-800">{correctAnswers}</div>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-xl font-bold text-gray-800">{correctAnswers}</div>
               <div className="text-xs text-gray-600">Correct</div>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-2xl font-bold text-gray-800">{accuracy}%</div>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <div className="text-xl font-bold text-gray-800">{accuracy}%</div>
               <div className="text-xs text-gray-600">Accuracy</div>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <Flame className="w-6 h-6 text-orange-500 mx-auto mb-1" />
-              <div className="text-xl font-bold text-gray-800">{streak}</div>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <Flame className="w-5 h-5 text-orange-500 mx-auto mb-1" />
+              <div className="text-lg font-bold text-gray-800">{streak}</div>
               <div className="text-xs text-gray-600">Streak</div>
             </div>
           </div>
-          <div className="bg-gray-50 rounded-xl p-4 mb-6">
-            <p className="font-semibold inline-flex items-center justify-center" style={{ color: level.color }}>
-              Level: {level.name}
-              <PrestigeBadge prestige={prestigeLevel} />
+          <div className="bg-gray-50 rounded-xl p-3 mb-4">
+            <p className="font-semibold inline-flex items-center justify-center text-sm" style={{ color: level.color }}>
+              {level.name}<PrestigeBadge prestige={prestigeLevel} />
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <button onClick={resetGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
-              Play Again
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={resetGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
+              Play
             </button>
-            <button onClick={() => setScreen('summary')} className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all">
+            <button onClick={() => setScreen('summary')} className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all">
               Summary
             </button>
-            <button onClick={() => setScreen('leaderboard')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
+            <button onClick={() => setScreen('leaderboard')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
               Ranks
             </button>
           </div>
@@ -963,15 +1028,15 @@ export default function FarcasterPFPQuiz() {
 
   if (screen === 'summary') {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4`}>
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Game Summary</h2>
+      <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} p-4 flex items-center justify-center`}>
+        <div className="max-w-4xl w-full">
+          <div className="bg-white rounded-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Summary</h2>
             
-            <div className="space-y-3 mb-6">
+            <div className="space-y-2 mb-4">
               {gameHistory.map((entry, idx) => (
-                <div key={idx} className="bg-gray-50 rounded-xl p-4 flex items-center gap-4 hover:bg-gray-100 transition-all">
-                  <div className="text-xl font-bold text-gray-400 w-8">
+                <div key={idx} className="bg-gray-50 rounded-lg p-3 flex items-center gap-3 hover:bg-gray-100 transition-all">
+                  <div className="text-lg font-bold text-gray-400 w-6">
                     {idx + 1}
                   </div>
                   <button 
@@ -984,16 +1049,16 @@ export default function FarcasterPFPQuiz() {
                     <img 
                       src={entry.question.correct.pfp_url} 
                       alt={entry.question.correct.username}
-                      className="w-16 h-16 rounded-full border-4 border-purple-500 shadow-lg cursor-pointer"
+                      className="w-12 h-12 rounded-full border-2 border-purple-500 shadow cursor-pointer"
                     />
                   </button>
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-800">{entry.question.correct.username}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-800 text-sm truncate">{entry.question.correct.username}</p>
                     {entry.timedOut ? (
-                      <p className="text-sm text-orange-600">Time expired ⏰</p>
+                      <p className="text-xs text-orange-600">Time expired ⏰</p>
                     ) : (
-                      <p className="text-sm text-gray-600">
-                        You guessed: <span className={entry.correct ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                      <p className="text-xs text-gray-600 truncate">
+                        You: <span className={entry.correct ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
                           {entry.userAnswer.username}
                         </span>
                       </p>
@@ -1001,12 +1066,12 @@ export default function FarcasterPFPQuiz() {
                   </div>
                   <div className="flex-shrink-0">
                     {entry.correct ? (
-                      <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center">
-                        <span className="text-2xl">✓</span>
+                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                        <span className="text-lg">✓</span>
                       </div>
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center">
-                        <span className="text-2xl text-white">✗</span>
+                      <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center">
+                        <span className="text-lg text-white">✗</span>
                       </div>
                     )}
                   </div>
@@ -1014,11 +1079,11 @@ export default function FarcasterPFPQuiz() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <button onClick={() => setScreen('result')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
-                ← Back to Results
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setScreen('result')} className={`bg-gradient-to-r ${currentTheme.accent} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
+                ← Results
               </button>
-              <button onClick={resetGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}>
+              <button onClick={resetGame} className={`bg-gradient-to-r ${currentTheme.button} text-white py-2.5 rounded-lg font-semibold text-sm hover:shadow-lg transition-all`}>
                 Play Again
               </button>
             </div>

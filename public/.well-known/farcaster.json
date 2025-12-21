@@ -1,0 +1,33 @@
+{
+  "frame": {
+    "name": "PFP Quiz",
+    "version": "1",
+    "iconUrl": "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/icon.png",
+    "homeUrl": "https://pfp-xplore.vercel.app/",
+    "imageUrl": "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot1.png",
+    "buttonTitle": "Tic Tok - Guess the PFP!",
+    "splashImageUrl": "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot1.png",
+    "splashBackgroundColor": "#000000",
+    "subtitle": "Guess the PFP!",
+    "description": "Fun way to explore follows, followers or interactions with a PFP lens. Guess their PFPs and explore profiles!",
+    "screenshotUrls": [
+      "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot2.png",
+      "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot4.png",
+      "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot5.png"
+    ],
+    "primaryCategory": "social",
+    "tags": [
+      "social",
+      "pfp",
+      "explore",
+      "profile",
+      "quiz"
+    ],
+    "tagline": "Guess, explore and have fun!"
+  },
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  }
+}

@@ -25,9 +25,9 @@
     ],
     "tagline": "Guess, explore and have fun!"
   },
-  "accountAssociation": {
-    "header": "",
-    "payload": "",
-    "signature": ""
+    "accountAssociation": {
+    "header": "eyJmaWQiOjEwNDY1MzMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhCZDJiMjBCNEFCRmEyNjA4MTA0MjQ3YmM2MTg2QzIzNzJiYWMyOENGIn0",
+    "payload": "eyJkb21haW4iOiJwZnAteHBsb3JlLnZlcmNlbC5hcHAifQ",
+    "signature": "rFVykQhfDnUD5mGPYLCiffVqoDU+eY6BGJNiUC+96ohLTWWJjXwvz+qjzxMGXdK+aWV5Foyp3b1riu6vduGavhw="
   }
 }

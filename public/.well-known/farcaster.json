@@ -1,20 +1,21 @@
 {
-  "frame": {
-    "name": "PFP Quiz",
+    "accountAssociation": {
+    "header": "eyJmaWQiOjEwNDY1MzMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhCZDJiMjBCNEFCRmEyNjA4MTA0MjQ3YmM2MTg2QzIzNzJiYWMyOENGIn0",
+    "payload": "eyJkb21haW4iOiJwZnAteHBsb3JlLnZlcmNlbC5hcHAifQ",
+    "signature": "rFVykQhfDnUD5mGPYLCiffVqoDU+eY6BGJNiUC+96ohLTWWJjXwvz+qjzxMGXdK+aWV5Foyp3b1riu6vduGavhw="
+  },
+  "miniapp": {
     "version": "1",
-    "iconUrl": "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/icon.png",
-    "homeUrl": "https://pfp-xplore.vercel.app/",
-    "imageUrl": "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot1.png",
-    "buttonTitle": "Tic Tok - Guess the PFP!",
-    "splashImageUrl": "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot1.png",
+    "name": "PFP Quiz",
+    "homeUrl": "https://pfp-xplore.vercel.app",
+    "iconUrl": "https://pfp-xplore.vercel.app/icon.png",
+    "imageUrl": "https://pfp-xplore.vercel.app/splash.png",
+    "splashImageUrl": "https://pfp-xplore.vercel.app/splash.png",
     "splashBackgroundColor": "#000000",
+    "buttonTitle": "🎮 Play Quiz",
     "subtitle": "Guess the PFP!",
     "description": "Fun way to explore follows, followers or interactions with a PFP lens. Guess their PFPs and explore profiles!",
-    "screenshotUrls": [
-      "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot2.png",
-      "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot4.png",
-      "https://github.com/projectuwb/farcaster-pfp-quiz/blob/2d17cb91f59dafd79ca14692fbc1d3addde77499/public/App%20Screenshot5.png"
-    ],
+    "tagline": "Guess, explore and have fun!",
     "primaryCategory": "social",
     "tags": [
       "social",
@@ -23,11 +24,9 @@
       "profile",
       "quiz"
     ],
-    "tagline": "Guess, explore and have fun!"
-  },
-    "accountAssociation": {
-    "header": "eyJmaWQiOjEwNDY1MzMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhCZDJiMjBCNEFCRmEyNjA4MTA0MjQ3YmM2MTg2QzIzNzJiYWMyOENGIn0",
-    "payload": "eyJkb21haW4iOiJwZnAteHBsb3JlLnZlcmNlbC5hcHAifQ",
-    "signature": "rFVykQhfDnUD5mGPYLCiffVqoDU+eY6BGJNiUC+96ohLTWWJjXwvz+qjzxMGXdK+aWV5Foyp3b1riu6vduGavhw="
+    "screenshotUrls": [
+      "https://pfp-xplore.vercel.app/screenshot1.png",
+      "https://pfp-xplore.vercel.app/screenshot2.png"
+    ]
   }
 }

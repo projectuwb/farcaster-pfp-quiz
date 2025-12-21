@@ -81,8 +81,141 @@ export default function FarcasterPFPQuiz() {
     darkMode: false,
     theme: 'cosmic'
   });
+  const [useMockData, setUseMockData] = useState(false);
+  const [loadingQuestion, setLoadingQuestion] = useState(false);
 
   const currentTheme = THEMES[settings.theme];
+
+  // Get API key from environment or use demo key
+  const NEYNAR_API_KEY = typeof window !== 'undefined' && window.REACT_APP_NEYNAR_API_KEY 
+    ? window.REACT_APP_NEYNAR_API_KEY 
+    : 'NEYNAR_API_DOCS';
+
+  // Fetch real user data from Neynar
+  const fetchRealUserData = async (fid) => {
+    try {
+      const response = await fetch(`https://api.neynar.com/v2/farcaster/user/bulk?fids=${fid}`, {
+        headers: {
+          'accept': 'application/json',
+          'api_key': NEYNAR_API_KEY
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch user data');
+      
+      const data = await response.json();
+      const user = data.users[0];
+      
+      return {
+        fid: user.fid,
+        username: user.username,
+        pfp_url: user.pfp_url,
+        display_name: user.display_name,
+        bio: user.profile.bio.text
+      };
+    } catch (error) {
+      console.error('Error fetching real user data:', error);
+      return null;
+    }
+  };
+
+  // Fetch followers
+  const fetchFollowers = async (fid, limit = 100) => {
+    try {
+      const response = await fetch(`https://api.neynar.com/v2/farcaster/followers?fid=${fid}&limit=${limit}`, {
+        headers: {
+          'accept': 'application/json',
+          'api_key': NEYNAR_API_KEY
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch followers');
+      
+      const data = await response.json();
+      return data.users.map(user => ({
+        fid: user.fid,
+        username: user.username,
+        pfp_url: user.pfp_url,
+        display_name: user.display_name
+      }));
+    } catch (error) {
+      console.error('Error fetching followers:', error);
+      return [];
+    }
+  };
+
+  // Fetch following
+  const fetchFollowing = async (fid, limit = 100) => {
+    try {
+      const response = await fetch(`https://api.neynar.com/v2/farcaster/following?fid=${fid}&limit=${limit}`, {
+        headers: {
+          'accept': 'application/json',
+          'api_key': NEYNAR_API_KEY
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch following');
+      
+      const data = await response.json();
+      return data.users.map(user => ({
+        fid: user.fid,
+        username: user.username,
+        pfp_url: user.pfp_url,
+        display_name: user.display_name
+      }));
+    } catch (error) {
+      console.error('Error fetching following:', error);
+      return [];
+    }
+  };
+
+  // Fetch users who interacted with you (liked/replied to your casts)
+  const fetchInteractions = async (fid, limit = 100) => {
+    try {
+      // Get user's recent casts
+      const castsResponse = await fetch(`https://api.neynar.com/v2/farcaster/feed/user/${fid}?limit=25`, {
+        headers: {
+          'accept': 'application/json',
+          'api_key': NEYNAR_API_KEY
+        }
+      });
+      
+      if (!castsResponse.ok) throw new Error('Failed to fetch casts');
+      
+      const castsData = await castsResponse.json();
+      const interactors = new Map();
+      
+      // Collect users who liked or replied
+      castsData.casts.forEach(cast => {
+        cast.reactions?.likes?.forEach(like => {
+          if (like.fid !== fid) {
+            interactors.set(like.fid, {
+              fid: like.fid,
+              username: like.username || `user${like.fid}`,
+              pfp_url: like.pfp_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${like.fid}`,
+              display_name: like.display_name || `User ${like.fid}`
+            });
+          }
+        });
+        
+        cast.replies?.forEach(reply => {
+          if (reply.author.fid !== fid) {
+            interactors.set(reply.author.fid, {
+              fid: reply.author.fid,
+              username: reply.author.username,
+              pfp_url: reply.author.pfp_url,
+              display_name: reply.author.display_name
+            });
+          }
+        });
+      });
+      
+      return Array.from(interactors.values()).slice(0, limit);
+    } catch (error) {
+      console.error('Error fetching interactions:', error);
+      return [];
+    }
+  };
 
   // Initialize Farcaster Mini App SDK
   useEffect(() => {
@@ -119,27 +252,41 @@ export default function FarcasterPFPQuiz() {
     try {
       // Try to get user data from SDK first
       if (sdkContext?.user) {
-        setUserData({
-          fid: sdkContext.user.fid,
-          username: sdkContext.user.username || `user${fid}`,
-          pfp_url: sdkContext.user.pfpUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${fid}`,
-          display_name: sdkContext.user.displayName || `User ${fid}`,
-          bio: sdkContext.user.bio || 'Farcaster user exploring the network!'
-        });
+        const realData = await fetchRealUserData(fid);
+        if (realData) {
+          setUserData(realData);
+        } else {
+          // Fallback to SDK data
+          setUserData({
+            fid: sdkContext.user.fid,
+            username: sdkContext.user.username || `user${fid}`,
+            pfp_url: sdkContext.user.pfpUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${fid}`,
+            display_name: sdkContext.user.displayName || `User ${fid}`,
+            bio: sdkContext.user.bio || 'Farcaster user exploring the network!'
+          });
+        }
       } else {
-        // Fallback to mock data
-        setUserData({
-          fid: fid,
-          username: `user${fid}`,
-          pfp_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fid}`,
-          display_name: `User ${fid}`,
-          bio: 'Farcaster user exploring the network!'
-        });
+        // Try real data
+        const realData = await fetchRealUserData(fid);
+        if (realData) {
+          setUserData(realData);
+        } else {
+          // Fallback to mock data
+          setUserData({
+            fid: fid,
+            username: `user${fid}`,
+            pfp_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${fid}`,
+            display_name: `User ${fid}`,
+            bio: 'Farcaster user exploring the network!'
+          });
+          setUseMockData(true);
+        }
       }
       
       await checkStreak();
     } catch (error) {
       console.error('Error fetching user data:', error);
+      setUseMockData(true);
     }
   };
 
@@ -208,7 +355,7 @@ export default function FarcasterPFPQuiz() {
           setShowFeedback(false);
           setTimedOut(false);
           setShowGreenFlash(false);
-          generateMockQuestion();
+          generateRealQuestion();
         }
       }
     }, 2500);
@@ -413,6 +560,53 @@ export default function FarcasterPFPQuiz() {
     setTimedOut(false);
   };
 
+  const generateRealQuestion = async () => {
+    if (!userFid || useMockData) {
+      generateMockQuestion();
+      return;
+    }
+
+    setLoadingQuestion(true);
+    
+    try {
+      let userList = [];
+      
+      // Fetch based on mode
+      if (mode === 'followers') {
+        userList = await fetchFollowers(userFid);
+      } else if (mode === 'following') {
+        userList = await fetchFollowing(userFid);
+      } else if (mode === 'interactions') {
+        userList = await fetchInteractions(userFid);
+      }
+
+      // If no users found or API failed, use mock data
+      if (userList.length < 4) {
+        console.log('Not enough users, using mock data');
+        generateMockQuestion();
+        setLoadingQuestion(false);
+        return;
+      }
+
+      // Shuffle and pick users
+      const shuffled = userList.sort(() => Math.random() - 0.5);
+      const correctUser = shuffled[0];
+      const wrongUsers = shuffled.slice(1, 4);
+
+      const allChoices = [correctUser, ...wrongUsers].sort(() => Math.random() - 0.5);
+
+      setCurrentQuestion({ correct: correctUser, choices: allChoices });
+      setTimeLeft(timer);
+      setTimerActive(true);
+      setTimedOut(false);
+    } catch (error) {
+      console.error('Error generating question:', error);
+      generateMockQuestion();
+    }
+    
+    setLoadingQuestion(false);
+  };
+
   const handleAnswer = (choice) => {
     setTimerActive(false);
     setSelectedAnswer(choice);
@@ -480,7 +674,7 @@ export default function FarcasterPFPQuiz() {
     setTimedOut(false);
     setGamePaused(false);
     setGameHistory([]);
-    generateMockQuestion();
+    generateRealQuestion();
     setScreen('game');
   };
 
@@ -542,7 +736,7 @@ export default function FarcasterPFPQuiz() {
           setShowRedFlash(false);
           setShowGreenFlash(false);
           setTimedOut(false);
-          generateMockQuestion();
+          generateRealQuestion();
         }, 2500);
       }
     }
@@ -604,11 +798,11 @@ export default function FarcasterPFPQuiz() {
   };
 
   const SettingsModal = () => (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Settings</h2>
-          <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-800">
+          <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-800 p-2">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -617,7 +811,14 @@ export default function FarcasterPFPQuiz() {
           <h3 className="font-semibold text-gray-800 mb-2 text-sm">Timer Duration</h3>
           <div className="grid grid-cols-2 gap-2">
             {[5, 10].map(duration => (
-              <button key={duration} onClick={() => saveSettings({ ...settings, timerDuration: duration })} className={`py-2 rounded-lg font-semibold text-sm transition-all ${settings.timerDuration === duration ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700'}`}>
+              <button 
+                key={duration} 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  saveSettings({ ...settings, timerDuration: duration });
+                }} 
+                className={`py-2 rounded-lg font-semibold text-sm transition-all ${settings.timerDuration === duration ? `bg-gradient-to-r ${currentTheme.button} text-white` : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
                 {duration}s
               </button>
             ))}
@@ -628,7 +829,14 @@ export default function FarcasterPFPQuiz() {
           <h3 className="font-semibold text-gray-800 mb-2 text-sm">Color Theme</h3>
           <div className="space-y-2">
             {Object.entries(THEMES).map(([key, theme]) => (
-              <button key={key} onClick={() => saveSettings({ ...settings, theme: key })} className={`w-full py-2 rounded-lg font-semibold text-sm transition-all bg-gradient-to-r ${theme.button} text-white ${settings.theme === key ? 'ring-2 ring-offset-2 ring-purple-500' : ''}`}>
+              <button 
+                key={key} 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  saveSettings({ ...settings, theme: key });
+                }} 
+                className={`w-full py-2 rounded-lg font-semibold text-sm transition-all bg-gradient-to-r ${theme.button} text-white hover:opacity-90 ${settings.theme === key ? 'ring-2 ring-offset-2 ring-purple-500' : ''}`}
+              >
                 {theme.name}
               </button>
             ))}
@@ -698,6 +906,13 @@ export default function FarcasterPFPQuiz() {
             </div>
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Choose Mode</h2>
+          {useMockData && (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded-lg">
+              <p className="text-xs text-yellow-800 text-center">
+                ℹ️ Using demo data. Add REACT_APP_NEYNAR_API_KEY to use real profiles.
+              </p>
+            </div>
+          )}
           <div className="space-y-3">
             <button onClick={() => { setMode('followers'); setScreen('questionSelect'); }} className={`w-full bg-gradient-to-r ${currentTheme.accent} text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2`}>
               <Users className="w-5 h-5" /> Followers
@@ -745,6 +960,17 @@ export default function FarcasterPFPQuiz() {
     const scoreInCycle = totalScore % 9000;
     const nextLevelThreshold = level.max + 1;
     const progressToNextLevel = ((scoreInCycle - level.min) / (nextLevelThreshold - level.min)) * 100;
+
+    if (loadingQuestion) {
+      return (
+        <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} flex items-center justify-center p-4`}>
+          <div className="bg-white rounded-3xl shadow-2xl p-8 text-center">
+            <div className="text-4xl mb-4 animate-bounce">🎭</div>
+            <p className="text-gray-600">Loading question...</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className={`min-h-screen bg-gradient-to-br ${currentTheme.game} flex flex-col p-2 sm:p-4 transition-colors duration-300 ${showRedFlash ? '!bg-red-600' : showGreenFlash ? '!bg-green-600' : ''}`}>
